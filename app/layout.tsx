@@ -26,8 +26,9 @@ export default function RootLayout({
             <body className={font.className}>
                 <ThemeProvider
                     attribute="class"
-                    defaultTheme="system"
-                    enableSystem
+                    defaultTheme="dark"
+                    forcedTheme="dark"
+                    enableSystem={false}
                     disableTransitionOnChange
                 >
                     {/* Komponen Iklan Popunder */}
