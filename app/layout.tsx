@@ -32,7 +32,8 @@ export default function RootLayout({
                     disableTransitionOnChange
                 >
                     {/* Komponen Iklan Popunder */}
-                    <Popunder targetUrl="https://www.google.com/" cooldownHours={1} />
+                    {/* 0.5 jam = 30 menit */}
+                    <Popunder targetUrl="https://www.google.com/" cooldownHours={0.5} />
                     
                     {children}
                 </ThemeProvider>
