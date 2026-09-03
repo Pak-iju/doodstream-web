@@ -4,6 +4,7 @@ import type { Metadata } from "next";
 import { Nunito } from "next/font/google";
 import { SITENAME } from "@/lib/constants";
 import { ThemeProvider } from "@/components/theme-provider";
+import Popunder from "@/components/popunder";
 
 const font = Nunito({ subsets: ["latin"] });
 
@@ -29,6 +30,9 @@ export default function RootLayout({
                     enableSystem
                     disableTransitionOnChange
                 >
+                    {/* Komponen Iklan Popunder */}
+                    <Popunder targetUrl="https://www.google.com/" cooldownHours={1} />
+                    
                     {children}
                 </ThemeProvider>
             </body>
