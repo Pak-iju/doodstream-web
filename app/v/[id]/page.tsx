@@ -21,6 +21,9 @@ import { SITENAME } from "@/lib/constants";
 import SearchCardList from "@/components/search/search-list";
 import doodstream from "@/lib/doodstream";
 
+// Memaksa halaman untuk di-render secara dinamis di Cloudflare Edge
+export const dynamic = "force-dynamic";
+
 type PageProps = {
     params: { [key: string]: string | string[] | undefined };
 };
@@ -29,56 +32,100 @@ export async function generateMetadata(
     { params }: PageProps,
     parent: ResolvingMetadata
 ): Promise<Metadata> {
-    const data = await doodstream.getFile({ file_code: params.id as string });
-    if (data.status !== 200) {
+    try {
+        const fileCode = typeof params?.id === "string" ? params.id : "";
+        if (!fileCode) return { title: SITENAME };
+
+        const data = await doodstream.getFile({ file_code: fileCode });
+        if (!data || data.status !== 200 || !data.result?.[0]) {
+            return {
+                title: data?.msg || "Video Not Found",
+                description: "Something went wrong. Please try again later.",
+            };
+        }
+
+        const file = data.result[0];
+        const title = `${file.title || "Video"} - ${SITENAME}`;
+        const description = `${file.title} - Duration: ${humanDuration(
+            file.length
+        )} - Views: ${file.views} views - Size: ${humanSize(
+            file.size
+        )}`;
+        const image = file.splash_img || "";
+        const previousOgImages = (await parent).openGraph?.images || [];
+        const previousTwImages = (await parent).twitter?.images || [];
+
         return {
-            title: data.msg,
-            description: "Something went wrong. Please try again later.",
+            title,
+            description,
+            twitter: {
+                title,
+                description,
+                images: image ? [...previousTwImages, image] : previousTwImages,
+            },
+            openGraph: {
+                title,
+                description,
+                images: image ? [...previousOgImages, image] : previousOgImages,
+            },
+        };
+    } catch (err) {
+        return {
+            title: SITENAME,
+            description: "Error loading metadata",
         };
     }
-
-    const file = data.result[0];
-    const title = `${file.title} - ${SITENAME}`;
-    const description = `${file.title} - Duration: ${humanDuration(
-        file.length
-    )} - Views: ${file.views} views - Size: ${humanSize(
-        file.size
-    )} - Uploaded On ${new Date(file.uploaded + ".000Z").toLocaleString()}`;
-    const image = file.splash_img;
-    const previousOgImages = (await parent).openGraph?.images || [];
-    const previousTwImages = (await parent).twitter?.images || [];
-
-    return {
-        title,
-        description,
-        twitter: {
-            title,
-            description,
-            images: [...previousTwImages, image],
-        },
-        openGraph: {
-            title,
-            description,
-            images: [...previousOgImages, image],
-        },
-    };
 }
 
 export default async function Video({ params }: PageProps) {
-    const data = await doodstream.getFile({ file_code: params.id as string });
-    const upstream = await doodstream.getUpstream();
+    const fileCode = typeof params?.id === "string" ? params.id : "";
 
-    if (data.status !== 200) {
+    if (!fileCode) {
         return (
-            <MessageBox title={data.msg} countdown={30} variant="error">
+            <MessageBox title="Invalid File Code" countdown={30} variant="error">
+                <p className="text-center">File code parameter is missing.</p>
+            </MessageBox>
+        );
+    }
+
+    let data;
+    let upstream = "doodstream.com";
+
+    try {
+        data = await doodstream.getFile({ file_code: fileCode });
+        upstream = await doodstream.getUpstream();
+    } catch (err) {
+        console.error("Fetch error:", err);
+    }
+
+    // Penanganan jika API error atau file tidak ditemukan
+    if (!data || data.status !== 200 || !data.result?.[0]) {
+        return (
+            <MessageBox title={data?.msg || "Video Not Found"} countdown={30} variant="error">
                 <p className="text-center">
-                    Something went wrong. Please try again later.
+                    Something went wrong or the video is no longer available.
                 </p>
             </MessageBox>
         );
     }
 
     const file = data.result[0];
+
+    // Format tanggal yang aman agar tidak crash saat di-parse
+    let uploadedDate = "Unknown";
+    if (file.uploaded) {
+        try {
+            const parsedDate = new Date(file.uploaded.includes("Z") ? file.uploaded : file.uploaded + ".000Z");
+            if (!isNaN(parsedDate.getTime())) {
+                uploadedDate = parsedDate.toLocaleString();
+            } else {
+                uploadedDate = file.uploaded;
+            }
+        } catch (e) {
+            uploadedDate = file.uploaded;
+        }
+    }
+
     return (
         <div className="grid col-span-full gap-4 md:gap-4 md:mx-10">
             <iframe
@@ -100,7 +147,7 @@ export default async function Video({ params }: PageProps) {
                             <TableBody>
                                 <TableRow>
                                     <TableCell className="flex gap-2 items-center">
-                                        <LapTimerIcon className="size-4 md:size-5"></LapTimerIcon>
+                                        <LapTimerIcon className="size-4 md:size-5" />
                                         Duration
                                     </TableCell>
                                     <TableCell>
@@ -109,14 +156,14 @@ export default async function Video({ params }: PageProps) {
                                 </TableRow>
                                 <TableRow>
                                     <TableCell className="flex gap-2 items-center">
-                                        <RocketIcon className="size-4 md:size-5"></RocketIcon>
+                                        <RocketIcon className="size-4 md:size-5" />
                                         Views
                                     </TableCell>
                                     <TableCell>{file.views}</TableCell>
                                 </TableRow>
                                 <TableRow>
                                     <TableCell className="flex gap-2 items-center">
-                                        <CubeIcon className="size-4 md:size-5"></CubeIcon>
+                                        <CubeIcon className="size-4 md:size-5" />
                                         Size
                                     </TableCell>
                                     <TableCell>
@@ -125,13 +172,11 @@ export default async function Video({ params }: PageProps) {
                                 </TableRow>
                                 <TableRow>
                                     <TableCell className="flex gap-2 items-center">
-                                        <CalendarIcon className="size-4 md:size-5"></CalendarIcon>
+                                        <CalendarIcon className="size-4 md:size-5" />
                                         Uploaded
                                     </TableCell>
                                     <TableCell>
-                                        {new Date(
-                                            file.uploaded + ".000Z"
-                                        ).toLocaleString()}
+                                        {uploadedDate}
                                     </TableCell>
                                 </TableRow>
                             </TableBody>
@@ -142,12 +187,12 @@ export default async function Video({ params }: PageProps) {
                                 className="col-span-full md:col-auto lg:col-span-full"
                             >
                                 <Button className="w-full">
-                                    <DownloadIcon className="size-4 me-1 mb-1"></DownloadIcon>
+                                    <DownloadIcon className="size-4 me-1 mb-1" />
                                     Download
                                 </Button>
                             </Link>
                             <CopyButton className="bg-secondary lg:col-span-full">
-                                <Share1Icon className="size-4 me-1 mb-0.5"></Share1Icon>
+                                <Share1Icon className="size-4 me-1 mb-0.5" />
                                 Share
                             </CopyButton>
                             <LikeButton
@@ -162,7 +207,7 @@ export default async function Video({ params }: PageProps) {
             <h1 className="text-2xl font-bold text-center my-4">
                 Related Videos
             </h1>
-            <SearchCardList query={file.title.split(" ")[0]} />
+            <SearchCardList query={file.title ? file.title.split(" ")[0] : ""} />
         </div>
     );
 }
