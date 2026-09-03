@@ -41,13 +41,23 @@ class Doodstream {
         revalidate?: number
     ) {
         params.key = this.key;
-        const url = `${this.baseUrl}/api${cmd}?${this.serializeQueryParams(
-            params
-        )}`;
-        const response = await fetch(url, {
-            next: { revalidate: revalidate || DEFAULT_REVALIDATE_INTERVAL },
-        });
-        return await response.json();
+        
+        // Pembersihan URL dari double slash jika baseUrl mengandung trailing slash
+        const cleanBaseUrl = this.baseUrl.replace(/\/$/, "");
+        const url = `${cleanBaseUrl}/api${cmd}?${this.serializeQueryParams(params)}`;
+
+        try {
+            const response = await fetch(url, {
+                next: { revalidate: revalidate ?? DEFAULT_REVALIDATE_INTERVAL },
+            });
+
+            if (!response.ok) return { status: 500, msg: "Failed to fetch from Doodstream" };
+
+            return await response.json();
+        } catch (error) {
+            console.error("Doodstream API Fetch Error:", error);
+            return { status: 500, msg: "Server Connection Error" };
+        }
     }
 
     async listFiles({
@@ -62,6 +72,7 @@ class Doodstream {
         if (per_page && per_page > 200)
             throw new Error("per_page cannot be greater than 200");
 
+        // Di-cache selama 5 menit (300 detik) untuk menghemat request list video
         const data = await this.fetch(
             "/file/list",
             {
@@ -69,35 +80,41 @@ class Doodstream {
                 per_page: per_page.toString(),
                 fld_id: fld_id.toString(),
             },
-            60
+            300
         );
         return data;
     }
 
     async getFile({ file_code }: { file_code: string }) {
-        const data = await this.fetch("/file/info", { file_code });
+        // Info detail 1 video jarang berubah, di-cache 1 jam (3600 detik)
+        const data = await this.fetch("/file/info", { file_code }, 3600);
         return data;
     }
 
     async search({ query }: { query: string }) {
+        // Pencarian di-cache selama 10 menit (600 detik)
         const data = await this.fetch(
             "/search/videos",
             { search_term: query },
-            60
+            600
         );
         return data;
     }
 
     async listFolders({ fld_id = "" }: { fld_id?: string }) {
-        const data = await this.fetch("/folder/list", {
-            only_folders: "1",
-            fld_id,
-        });
+        // Folder di-cache selama 1 jam (3600 detik)
+        const data = await this.fetch(
+            "/folder/list", 
+            { only_folders: "1", fld_id },
+            3600
+        );
         return data;
     }
 
     async getFolder({ fld_id }: { fld_id: string }) {
         const data = await this.listFolders({ fld_id: "" });
+        if (!data?.result?.folders) return { ...data, folder: null };
+
         const folder = data.result.folders.find(
             (f: any) => f.fld_id === fld_id
         );
@@ -111,14 +128,24 @@ class Doodstream {
         if (this.upstream) return this.upstream;
 
         const data = await this.listFiles({ page: 1, per_page: 1 });
-        const sampleFile = data.result.files[0];
-        const url = new URL(sampleFile.download_url);
-        this.upstream = url.hostname;
+        const sampleFile = data?.result?.files?.[0];
+        
+        if (!sampleFile || !sampleFile.download_url) {
+            return "doodstream.com"; // Default fallback domain jika API kosong
+        }
 
-        setTimeout(() => {
-            this.upstream = undefined;
-        }, DEFAULT_REVALIDATE_INTERVAL * 1000);
-        return url.hostname;
+        try {
+            const url = new URL(sampleFile.download_url);
+            this.upstream = url.hostname;
+
+            setTimeout(() => {
+                this.upstream = undefined;
+            }, (DEFAULT_REVALIDATE_INTERVAL || 300) * 1000);
+
+            return url.hostname;
+        } catch {
+            return "doodstream.com";
+        }
     }
 }
 
