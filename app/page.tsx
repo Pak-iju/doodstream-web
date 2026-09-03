@@ -2,7 +2,6 @@ import CardList from "@/components/card-list";
 import { DEFAULT_PER_PAGE } from "@/lib/constants";
 import SearchCardList from "@/components/search/search-list";
 
-// Memaksa Next.js untuk selalu render halaman ini secara dynamic di runtime
 export const dynamic = "force-dynamic";
 
 export default async function Home({
