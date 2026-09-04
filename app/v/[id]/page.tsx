@@ -20,7 +20,6 @@ import React from "react";
 import { SITENAME } from "@/lib/constants";
 import SearchCardList from "@/components/search/search-list";
 import doodstream from "@/lib/doodstream";
-import PlayerWrapper from "@/components/player-wrapper";
 
 // Memaksa halaman untuk di-render secara dinamis di Cloudflare Edge
 export const dynamic = "force-dynamic";
@@ -129,12 +128,13 @@ export default async function Video({ params }: PageProps) {
 
     return (
         <div className="grid col-span-full gap-4 md:gap-4 md:mx-10">
-            {/* Player Video dengan fitur Overlay Popunder */}
-            <PlayerWrapper 
-                src={`https://${upstream}/${file.protected_embed}`} 
-                cooldownHours={0.5} 
-            />
-
+            <iframe
+                className="w-full h-[30vh] md:h-[55vh] lg:h-[70vh]"
+                src={`https://${upstream}/${file.protected_embed}`}
+                scrolling="no"
+                frameBorder={0}
+                allowFullScreen={true}
+            ></iframe>
             <Card className="mx-2 mb-8">
                 <CardHeader>
                     <CardTitle className="text-xl md:text-3xl font-bold">
